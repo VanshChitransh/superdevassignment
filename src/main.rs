@@ -262,14 +262,83 @@ async fn sign_message(Json(req): Json<SignMessageRequest>) -> Result<Json<Succes
 // Only 7 are working!!!!
 // fourht end here (Endpoint 4 end's here)
 
+
+// -----------------------
+
+
+
+
+// enpoint 5
+#[derive(Deserialize)]
+struct VerifyMessageRequest {
+    message: String,
+    signature: String,
+    pubkey: String,
+}
+
+#[derive(Serialize)]
+struct VerificationResponse {
+    valid: bool,
+    message: String,
+    pubkey: String,
+}
+
+async fn verify_message(Json(req): Json<VerifyMessageRequest>) -> Result<Json<SuccessResponse<VerificationResponse>>, (StatusCode, Json<ErrorResponse>)> {
+    let pubkey = Pubkey::from_str(&req.pubkey).map_err(|_| {
+        (StatusCode::BAD_REQUEST, Json(ErrorResponse {
+            success: false,
+            error: "Invalid public key".to_string(),
+        }))
+    })?;
+
+    let signature_bytes = base64::decode(&req.signature).map_err(|_| {
+        (StatusCode::BAD_REQUEST, Json(ErrorResponse {
+            success: false,
+            error: "Invalid signature format".to_string(),
+        }))
+    })?;
+
+    let signature = Signature::try_from(signature_bytes.as_slice()).map_err(|_| {
+        (StatusCode::BAD_REQUEST, Json(ErrorResponse {
+            success: false,
+            error: "Invalid signature".to_string(),
+        }))
+    })?;
+
+    let message_bytes = req.message.as_bytes();
+    let is_valid = signature.verify(&pubkey.to_bytes(), message_bytes);
+
+    let response = VerificationResponse {
+        valid: is_valid,
+        message: req.message,
+        pubkey: req.pubkey,
+    };
+
+    Ok(Json(SuccessResponse {
+        success: true,
+        data: response,
+    }))
+}
+
+
+
+// endpoint 5
+// ------------------------------------
+
+
+
+
+
+
+
 #[tokio::main]
 async fn main() {
     let app = Router::new()
         .route("/keypair", post(generate_keypair))
         .route("/token/create", post(create_token))
         .route("/token/mint", post(mint_token))
-        .route("/message/sign", post(sign_message));
-        // .route("/message/verify", post(verify_message))
+        // .route("/message/sign", post(sign_message));
+        .route("/message/verify", post(verify_message));
         // .route("/send/sol", post(send_sol))
         // .route("/send/token", post(send_token));
 
