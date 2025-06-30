@@ -21,6 +21,7 @@ use spl_token::instruction::{initialize_mint,
 
 use std::str::FromStr;
 use std::net::SocketAddr;
+use base64::{Engine as _, engine::general_purpose};
 
 
 
@@ -121,7 +122,7 @@ async fn create_token(Json(req): Json<RequestForTokenCreation>) -> Result<Json<S
     let response = ResponseForInstruction {
         program_id: instruction.program_id.to_string(),
         accounts,
-        instruction_data: base64::encode(&instruction.data),
+        instruction_data: general_purpose::STANDARD.encode(&instruction.data),
     };
 
     Ok(Json(SuccessResponse {
@@ -132,6 +133,8 @@ async fn create_token(Json(req): Json<RequestForTokenCreation>) -> Result<Json<S
 // -----------(Second endpoint complete, working till here)
 
 
+
+// -------------------- THird one is here
 
 #[derive(Deserialize)]
 struct MintTokenWaliRequest {
@@ -163,6 +166,14 @@ async fn mint_token(Json(req): Json<MintTokenWaliRequest>) -> Result<Json<Succes
         }))
     })?;
 
+    // Add validation for zero amount
+    if req.amount == 0 {
+        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse {
+            success: false,
+            error: "Amount must be greater than 0".to_string(),
+        })));
+    }
+
     let instruction = mint_to(
         &spl_token::id(),
         &mint,
@@ -188,7 +199,7 @@ async fn mint_token(Json(req): Json<MintTokenWaliRequest>) -> Result<Json<Succes
     let response = ResponseForInstruction {
         program_id: instruction.program_id.to_string(),
         accounts,
-        instruction_data: base64::encode(&instruction.data),
+        instruction_data: general_purpose::STANDARD.encode(&instruction.data),
     };
 
     Ok(Json(SuccessResponse {
@@ -196,6 +207,11 @@ async fn mint_token(Json(req): Json<MintTokenWaliRequest>) -> Result<Json<Succes
         data: response,
     }))
 }
+
+
+// ------------------ THird one completess here(Endpoint 3 is dpne);
+
+
 
 
 #[tokio::main]
@@ -214,4 +230,3 @@ async fn main() {
     println!("Server running on {}", addr);
     axum::serve(listener, app).await.unwrap();
 }
-
