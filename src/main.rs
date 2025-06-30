@@ -84,6 +84,14 @@ struct ResponseForAccountMeta {
 }
 
 async fn create_token(Json(req): Json<RequestForTokenCreation>) -> Result<Json<SuccessResponse<ResponseForInstruction>>, (StatusCode, Json<ErrorResponse>)> {
+    // Check for empty strings
+    if req.mint_authority.trim().is_empty() || req.mint.trim().is_empty() {
+        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse {
+            success: false,
+            error: "Missing required fields".to_string(),
+        })));
+    }
+
     let mint_authority = Pubkey::from_str(&req.mint_authority).map_err(|_| {
         (StatusCode::BAD_REQUEST, Json(ErrorResponse {
             success: false,
@@ -145,6 +153,14 @@ struct MintTokenWaliRequest {
 }
 
 async fn mint_token(Json(req): Json<MintTokenWaliRequest>) -> Result<Json<SuccessResponse<ResponseForInstruction>>, (StatusCode, Json<ErrorResponse>)> {
+    // Check for empty strings
+    if req.mint.trim().is_empty() || req.destination.trim().is_empty() || req.authority.trim().is_empty() {
+        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse {
+            success: false,
+            error: "Missing required fields".to_string(),
+        })));
+    }
+
     let mint = Pubkey::from_str(&req.mint).map_err(|_| {
         (StatusCode::BAD_REQUEST, Json(ErrorResponse {
             success: false,
@@ -229,6 +245,14 @@ struct SignatureResponse {
 
 
 async fn sign_message(Json(req): Json<SignMessageRequest>) -> Result<Json<SuccessResponse<SignatureResponse>>, (StatusCode, Json<ErrorResponse>)> {
+    // Check for empty/missing fields
+    if req.message.trim().is_empty() || req.secret.trim().is_empty() {
+        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse {
+            success: false,
+            error: "Missing required fields".to_string(),
+        })));
+    }
+
     let secret_bytes = bs58::decode(&req.secret).into_vec().map_err(|_| {
         (StatusCode::BAD_REQUEST, Json(ErrorResponse {
             success: false,
@@ -247,7 +271,7 @@ async fn sign_message(Json(req): Json<SignMessageRequest>) -> Result<Json<Succes
     let signature = keypair.sign_message(message_bytes);
 
     let response = SignatureResponse {
-        signature: base64::encode(signature.as_ref()),
+        signature: general_purpose::STANDARD.encode(signature.as_ref()),
         public_key: keypair.pubkey().to_string(),
         message: req.message,
     };
@@ -284,6 +308,14 @@ struct VerificationResponse {
 }
 
 async fn verify_message(Json(req): Json<VerifyMessageRequest>) -> Result<Json<SuccessResponse<VerificationResponse>>, (StatusCode, Json<ErrorResponse>)> {
+    // Check for empty/missing fields
+    if req.message.trim().is_empty() || req.signature.trim().is_empty() || req.pubkey.trim().is_empty() {
+        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse {
+            success: false,
+            error: "Missing required fields".to_string(),
+        })));
+    }
+
     let pubkey = Pubkey::from_str(&req.pubkey).map_err(|_| {
         (StatusCode::BAD_REQUEST, Json(ErrorResponse {
             success: false,
@@ -291,7 +323,7 @@ async fn verify_message(Json(req): Json<VerifyMessageRequest>) -> Result<Json<Su
         }))
     })?;
 
-    let signature_bytes = base64::decode(&req.signature).map_err(|_| {
+    let signature_bytes = general_purpose::STANDARD.decode(&req.signature).map_err(|_| {
         (StatusCode::BAD_REQUEST, Json(ErrorResponse {
             success: false,
             error: "Invalid signature format".to_string(),
@@ -329,6 +361,94 @@ async fn verify_message(Json(req): Json<VerifyMessageRequest>) -> Result<Json<Su
 
 
 
+// ---------------
+// endpoitn 6
+
+
+#[derive(Deserialize)]
+struct SendSolRequest {
+    from: String,
+    to: String,
+    lamports: u64,
+}
+
+#[derive(Serialize)]
+struct SolTransferResponse {
+    program_id: String,
+    accounts: Vec<String>,
+    instruction_data: String,
+}
+
+async fn send_sol(Json(req): Json<SendSolRequest>) -> Result<Json<SuccessResponse<SolTransferResponse>>, (StatusCode, Json<ErrorResponse>)> {
+    // Check for empty strings
+    if req.from.trim().is_empty() || req.to.trim().is_empty() {
+        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse {
+            success: false,
+            error: "Missing required fields".to_string(),
+        })));
+    }
+
+    let from_pubkey = Pubkey::from_str(&req.from).map_err(|_| {
+        (StatusCode::BAD_REQUEST, Json(ErrorResponse {
+            success: false,
+            error: "Invalid from address".to_string(),
+        }))
+    })?;
+
+    let to_pubkey = Pubkey::from_str(&req.to).map_err(|_| {
+        (StatusCode::BAD_REQUEST, Json(ErrorResponse {
+            success: false,
+            error: "Invalid to address".to_string(),
+        }))
+    })?;
+
+    if req.lamports == 0 {
+        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse {
+            success: false,
+            error: "Amount must be greater than 0".to_string(),
+        })));
+    }
+
+    // Check if from and to are the same
+    if from_pubkey == to_pubkey {
+        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse {
+            success: false,
+            error: "Cannot send to same address".to_string(),
+        })));
+    }
+
+    let instruction = system_instruction::transfer(&from_pubkey, &to_pubkey, req.lamports);
+
+    let response = SolTransferResponse {
+        program_id: instruction.program_id.to_string(),
+        accounts: instruction.accounts.iter().map(|acc| acc.pubkey.to_string()).collect(),
+        instruction_data: general_purpose::STANDARD.encode(&instruction.data),
+    };
+
+    Ok(Json(SuccessResponse {
+        success: true,
+        data: response,
+    }))
+}
+
+
+// ---------------
+// endpoint 7 - Send Token (Error response only as requested)
+
+#[derive(Deserialize)]
+struct SendTokenRequest {
+    destination: String,
+    mint: String,
+    owner: String,
+    amount: u64,
+}
+
+async fn send_token(Json(_req): Json<SendTokenRequest>) -> Result<Json<SuccessResponse<()>>, (StatusCode, Json<ErrorResponse>)> {
+    Err((StatusCode::BAD_REQUEST, Json(ErrorResponse {
+        success: false,
+        error: "Token transfer endpoint not implemented".to_string(),
+    })))
+}
 
 
 #[tokio::main]
@@ -337,10 +457,10 @@ async fn main() {
         .route("/keypair", post(generate_keypair))
         .route("/token/create", post(create_token))
         .route("/token/mint", post(mint_token))
-        // .route("/message/sign", post(sign_message));
-        .route("/message/verify", post(verify_message));
-        // .route("/send/sol", post(send_sol))
-        // .route("/send/token", post(send_token));
+        .route("/message/sign", post(sign_message))
+        .route("/message/verify", post(verify_message))
+        .route("/send/sol", post(send_sol))
+        .route("/send/token", post(send_token));
 
     let addr = SocketAddr::from(([127,0,0,1], 3000));
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
