@@ -36,6 +36,23 @@ struct ErrorResponse {
     error: String,
 }
 
+#[derive(Serialize)]
+struct ResponseOfKeypair {
+    pubkey: String,
+    secret: String,
+}
+
+async fn generate_keypair() -> Json<SuccessResponse<ResponseOfKeypair>> {
+    let keypair = Keypair::new();
+    let response = ResponseOfKeypair {
+        pubkey: keypair.pubkey().to_string(),
+        secret: bs58::encode(keypair.to_bytes()).into_string(),
+    };
+    Json(SuccessResponse {
+        success: true,
+        data: response,
+    })
+}
 
 #[tokio::main]
 async fn main() {
