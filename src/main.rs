@@ -212,15 +212,63 @@ async fn mint_token(Json(req): Json<MintTokenWaliRequest>) -> Result<Json<Succes
 // ------------------ THird one completess here(Endpoint 3 is dpne);
 
 
+//// Fourth one start here!!!
 
+#[derive(Deserialize)]
+struct SignMessageRequest {
+    message: String,
+    secret: String,
+}
+
+#[derive(Serialize)]
+struct SignatureResponse {
+    signature: String,
+    public_key: String,
+    message: String,
+}
+
+
+async fn sign_message(Json(req): Json<SignMessageRequest>) -> Result<Json<SuccessResponse<SignatureResponse>>, (StatusCode, Json<ErrorResponse>)> {
+    let secret_bytes = bs58::decode(&req.secret).into_vec().map_err(|_| {
+        (StatusCode::BAD_REQUEST, Json(ErrorResponse {
+            success: false,
+            error: "key format theek karo".to_string(),
+        }))
+    })?;
+
+    let keypair = Keypair::from_bytes(&secret_bytes).map_err(|_| {
+        (StatusCode::BAD_REQUEST, Json(ErrorResponse {
+            success: false,
+            error: "Invalid secret key".to_string(),
+        }))
+    })?;
+
+    let message_bytes = req.message.as_bytes();
+    let signature = keypair.sign_message(message_bytes);
+
+    let response = SignatureResponse {
+        signature: base64::encode(signature.as_ref()),
+        public_key: keypair.pubkey().to_string(),
+        message: req.message,
+    };
+
+    Ok(Json(SuccessResponse {
+        success: true,
+        data: response,
+    }))
+}
+
+
+// Only 7 are working!!!!
+// fourht end here (Endpoint 4 end's here)
 
 #[tokio::main]
 async fn main() {
     let app = Router::new()
         .route("/keypair", post(generate_keypair))
         .route("/token/create", post(create_token))
-        .route("/token/mint", post(mint_token));
-        // .route("/message/sign", post(sign_message))
+        .route("/token/mint", post(mint_token))
+        .route("/message/sign", post(sign_message));
         // .route("/message/verify", post(verify_message))
         // .route("/send/sol", post(send_sol))
         // .route("/send/token", post(send_token));
